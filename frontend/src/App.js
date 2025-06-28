@@ -1,4 +1,4 @@
-// src/App.jsx - Clean, deploy-ready Hybrid Address Matching UI
+// src/App.jsx - Final working version for Vercel + Azure
 
 import React, { useState } from 'react';
 
@@ -9,8 +9,8 @@ function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Use environment variable for backend URL with fallback to localhost
-  const backendUrl = 'ccp-address-matcher-backend-a9eze9fmf8dvccga.eastus-01.azurewebsites.net';
+  // ✅ Correct hardcoded Azure URL with https
+  const backendUrl = 'https://ccp-address-matcher-backend-a9eze9fmf8dvccga.eastus-01.azurewebsites.net';
   console.log('Backend URL in use:', backendUrl);
 
   const handleSubmit = async (e) => {
