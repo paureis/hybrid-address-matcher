@@ -69,36 +69,8 @@ app.MapPost("/api/google-validate", async (GoogleAddressValidatorService validat
     }
 });
 
-app.MapPost("/api/hybrid-compare", async (CompareRequest request, GoogleAddressValidatorService googleService) =>
-{
-    async Task<NormalizedAddress> GetValidatedAddress(string input)
-    {
-        var googleResultString = await googleService.NormalizeAddressAsync(input);
-        if (!string.IsNullOrWhiteSpace(googleResultString))
-        {
-            return AddressNormalizer.Normalize(googleResultString);
-        }
-        return AddressNormalizer.Normalize(input);
-    }
 
-    var validated1 = await GetValidatedAddress(request.Address1);
-    var validated2 = await GetValidatedAddress(request.Address2);
-
-    var differences = AddressComparer.Compare(validated1, validated2);
-    var match = differences.Count == 0;
-
-    return Results.Ok(new
-    {
-        normalizedAddress1 = validated1.ToString(),
-        normalizedAddress2 = validated2.ToString(),
-        match,
-        differences
-    });
-});
-
-
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-app.Run($"http://0.0.0.0:{port}");
+app.Run();
 
 // Request types
 record CompareRequest(string Address1, string Address2);
