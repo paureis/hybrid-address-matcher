@@ -1,4 +1,4 @@
-// src/App.jsx - Detailed Hybrid Comparison UI for CCP
+// src/App.jsx - Clean, deploy-ready Hybrid Address Matching UI
 
 import React, { useState } from 'react';
 
@@ -9,6 +9,9 @@ function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Use environment variable for backend URL with fallback to localhost
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -16,7 +19,7 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch('https://localhost:5001/api/hybrid-compare', {
+      const response = await fetch(`${backendUrl}/api/hybrid-compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address1, address2 }),
@@ -24,8 +27,8 @@ function App() {
 
       if (!response.ok) {
         const text = await response.text();
-        console.error('Error response:', text);
-        throw new Error('API request failed');
+        console.error('API Error Response:', text);
+        throw new Error(`API request failed with status ${response.status}`);
       }
 
       const data = await response.json();
@@ -33,7 +36,7 @@ function App() {
       setResult(data);
     } catch (err) {
       console.error('Hybrid comparison error:', err);
-      setError('An error occurred while comparing the addresses.');
+      setError('An error occurred while comparing the addresses. Please try again.');
     } finally {
       setLoading(false);
     }
