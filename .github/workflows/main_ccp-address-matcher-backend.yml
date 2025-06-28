@@ -1,10 +1,40 @@
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+name: Build and Deploy .NET Backend to Azure App Service
 
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v3
-      with:
-        app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        package: CCP.AddressMatcher/publish
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AZURE_WEBAPP_NAME: ccp-address-matcher-backend
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore CCP.AddressMatcher/CCP.AddressMatcher.csproj
+
+      - name: Build
+        run: dotnet build CCP.AddressMatcher/CCP.AddressMatcher.csproj --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish CCP.AddressMatcher/CCP.AddressMatcher.csproj --configuration Release --no-build --output ./publish
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./publish
