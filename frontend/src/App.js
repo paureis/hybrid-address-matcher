@@ -10,7 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   // Use environment variable for backend URL with fallback to localhost
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
+  const backendUrl = 'ccp-address-matcher-backend-a9eze9fmf8dvccga.eastus-01.azurewebsites.net';
   console.log('Backend URL in use:', backendUrl);
 
   const handleSubmit = async (e) => {
