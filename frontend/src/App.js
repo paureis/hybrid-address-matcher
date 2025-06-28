@@ -11,6 +11,7 @@ function App() {
 
   // Use environment variable for backend URL with fallback to localhost
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
+  console.log('Backend URL in use:', backendUrl);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
