@@ -69,6 +69,32 @@ app.MapPost("/api/google-validate", async (GoogleAddressValidatorService validat
     }
 });
 
+// 🪐 Hybrid comparison using local normalization + match + differences
+app.MapPost("/api/hybrid-compare", (CompareRequest request) =>
+{
+    var normalized1 = AddressNormalizer.Normalize(request.Address1);
+    var normalized2 = AddressNormalizer.Normalize(request.Address2);
+
+    bool isMatch = string.Equals(normalized1.ToString(), normalized2.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    List<string> differences = new();
+    if (!isMatch)
+    {
+        differences.Add($"Address1: {normalized1}");
+        differences.Add($"Address2: {normalized2}");
+    }
+
+    return Results.Ok(new
+    {
+    normalizedAddress1 = normalized1.ToString(),
+    normalizedAddress2 = normalized2.ToString(),
+    match = isMatch,
+    differences = differences
+    });
+
+});
+
+//
 
 app.Run();
 
