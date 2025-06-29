@@ -33,45 +33,69 @@ namespace CCP.AddressMatcher.Utils
         };
 
         public static NormalizedAddress? Normalize(string address)
-        {
-            if (string.IsNullOrWhiteSpace(address) || address.Trim().Split(' ').Length == 1)
-                return null; // consider invalid
+{
+    if (string.IsNullOrWhiteSpace(address) || address.Trim().Split(' ').Length == 1)
+        return null; // consider invalid
 
-            address = address.ToLowerInvariant();
-            address = Regex.Replace(address, "[.,]", "");
-            address = Regex.Replace(address, "\\s+", " ").Trim();
+    address = address.ToLowerInvariant();
+    address = Regex.Replace(address, "[.,]", "");
+    address = Regex.Replace(address, "\\s+", " ").Trim();
 
-            var tokens = address.Split(' ').ToList();
+    var tokens = address.Split(' ').ToList();
 
-            for (int i = 0; i < tokens.Count; i++)
-            {
-                if (AbbreviationMap.TryGetValue(tokens[i], out var expanded))
-                    tokens[i] = expanded;
+    for (int i = 0; i < tokens.Count; i++)
+    {
+        if (AbbreviationMap.TryGetValue(tokens[i], out var expanded))
+            tokens[i] = expanded;
 
-                if (StateMap.TryGetValue(tokens[i], out var stateAbbr))
-                    tokens[i] = stateAbbr;
-            }
+        if (StateMap.TryGetValue(tokens[i], out var stateAbbr))
+            tokens[i] = stateAbbr;
+    }
 
-            var normalized = new NormalizedAddress();
-            int zipCodeIndex = tokens.FindIndex(t => Regex.IsMatch(t, "^\\d{5}(-\\d{4})?$"));
-            if (zipCodeIndex != -1)
-            {
-                normalized.Zip = tokens[zipCodeIndex];
-                tokens.RemoveAt(zipCodeIndex);
-            }
+    var normalized = new NormalizedAddress();
 
-            if (tokens.Count >= 3)
-            {
-                normalized.Street = string.Join(" ", tokens.Take(tokens.Count - 2));
-                normalized.City = tokens[^2];
-                normalized.State = tokens[^1];
-            }
-            else
-            {
-                normalized.Street = string.Join(" ", tokens);
-            }
+    // Extract ZIP code
+    var zipMatch = tokens.FirstOrDefault(t => Regex.IsMatch(t, @"^\d{5}(-\d{4})?$"));
+    if (zipMatch != null)
+    {
+        normalized.Zip = zipMatch;
+        tokens.Remove(zipMatch);
+    }
 
-            return normalized;
-        }
+    // Extract state
+    var states = new HashSet<string>(StateMap.Values);
+    var stateToken = tokens.FirstOrDefault(t => states.Contains(t));
+    if (stateToken != null)
+    {
+        normalized.State = stateToken;
+        tokens.Remove(stateToken);
+    }
+
+    // Extract house number (first numeric token with 1-4 digits)
+    var houseNumberToken = tokens.FirstOrDefault(t => Regex.IsMatch(t, @"^\d{1,5}$"));
+    if (houseNumberToken != null)
+    {
+        normalized.Street = houseNumberToken + " ";
+        tokens.Remove(houseNumberToken);
+    }
+
+    // Attempt to extract city (after street tokens removed)
+    if (string.IsNullOrEmpty(normalized.State) && tokens.Count >= 2)
+    {
+        normalized.City = tokens[^1];
+        tokens.RemoveAt(tokens.Count - 1);
+    }
+    else if (!string.IsNullOrEmpty(normalized.State) && tokens.Count >= 1)
+    {
+        normalized.City = tokens[^1];
+        tokens.RemoveAt(tokens.Count - 1);
+    }
+
+    // Remaining tokens are street
+    normalized.Street += string.Join(" ", tokens);
+
+    return normalized;
+}
+
     }
 }
