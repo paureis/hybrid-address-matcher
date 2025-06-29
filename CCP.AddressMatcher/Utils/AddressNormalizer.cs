@@ -54,48 +54,34 @@ namespace CCP.AddressMatcher.Utils
 
     var normalized = new NormalizedAddress();
 
-    // Extract ZIP code
-    var zipMatch = tokens.FirstOrDefault(t => Regex.IsMatch(t, @"^\d{5}(-\d{4})?$"));
-    if (zipMatch != null)
+    // ✅ Extract ZIP only from end
+    if (tokens.Count > 0 && Regex.IsMatch(tokens[^1], @"^\d{5}(-\d{4})?$"))
     {
-        normalized.Zip = zipMatch;
-        tokens.Remove(zipMatch);
+        normalized.Zip = tokens[^1];
+        tokens.RemoveAt(tokens.Count - 1);
     }
 
-    // Extract state
+    // ✅ Extract state from end
     var states = new HashSet<string>(StateMap.Values);
-    var stateToken = tokens.FirstOrDefault(t => states.Contains(t));
-    if (stateToken != null)
+    if (tokens.Count > 0 && states.Contains(tokens[^1]))
     {
-        normalized.State = stateToken;
-        tokens.Remove(stateToken);
-    }
-
-    // Extract house number (first numeric token with 1-4 digits)
-    var houseNumberToken = tokens.FirstOrDefault(t => Regex.IsMatch(t, @"^\d{1,5}$"));
-    if (houseNumberToken != null)
-    {
-        normalized.Street = houseNumberToken + " ";
-        tokens.Remove(houseNumberToken);
-    }
-
-    // Attempt to extract city (after street tokens removed)
-    if (string.IsNullOrEmpty(normalized.State) && tokens.Count >= 2)
-    {
-        normalized.City = tokens[^1];
+        normalized.State = tokens[^1];
         tokens.RemoveAt(tokens.Count - 1);
     }
-    else if (!string.IsNullOrEmpty(normalized.State) && tokens.Count >= 1)
+
+    // ✅ Extract city if available
+    if (tokens.Count > 0)
     {
         normalized.City = tokens[^1];
         tokens.RemoveAt(tokens.Count - 1);
     }
 
-    // Remaining tokens are street
-    normalized.Street += string.Join(" ", tokens);
+    // ✅ Remaining tokens are street (including house number always at the start)
+    normalized.Street = string.Join(" ", tokens);
 
     return normalized;
 }
+
 
     }
 }
