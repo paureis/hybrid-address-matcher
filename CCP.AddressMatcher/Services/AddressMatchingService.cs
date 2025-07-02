@@ -100,20 +100,49 @@ namespace CCP.AddressMatcher.Services
                 return (true, 0.85, "All key address components match");
             }
 
-            // Method 4: Distance-based comparison
-            if (distance <= 50) // Same building threshold
+            // Method 4: Enhanced distance-based comparison with stricter thresholds
+            if (distance <= 5) // Very strict - same entrance/building
             {
-                return (true, 0.75, $"Same building ({Math.Round(distance)}m apart)");
+                return (true, 0.80, $"Same building entrance ({Math.Round(distance)}m apart)");
             }
             
-            if (distance <= 100) // Very close, possibly same property
+            if (distance <= 15) // Strict - likely same building but different entrances
             {
-                return (true, 0.65, $"Very close addresses ({Math.Round(distance)}m apart)");
+                // Additional check: same street number
+                if (SameStreetNumber(components1, components2))
+                {
+                    return (true, 0.75, $"Same building ({Math.Round(distance)}m apart)");
+                }
+                else
+                {
+                    return (false, 0.40, $"Very close but different buildings ({Math.Round(distance)}m apart)");
+                }
             }
 
-            if (distance <= 200) // Nearby, manual review suggested
+            if (distance <= 100) // Medium - possibly same property/complex
             {
-                return (false, 0.30, $"Nearby addresses ({Math.Round(distance)}m apart) - manual review suggested");
+                // Only match if explicitly same address components
+                if (SameStreetNumber(components1, components2) && SameStreet(components1, components2))
+                {
+                    return (true, 0.65, $"Same property complex ({Math.Round(distance)}m apart)");
+                }
+                else
+                {
+                    return (false, 0.25, $"Nearby different buildings ({Math.Round(distance)}m apart)");
+                }
+            }
+
+            if (distance <= 500) // Large - corporate campus consideration
+            {
+                // Special handling for known corporate campuses
+                if (IsPotentialCorporateCampus(components1, components2, distance))
+                {
+                    return (true, 0.60, $"Potential corporate campus ({Math.Round(distance)}m apart) - review recommended");
+                }
+                else
+                {
+                    return (false, 0.20, $"Different locations ({Math.Round(distance)}m apart)");
+                }
             }
 
             return (false, 0.10, $"Different locations ({Math.Round(distance)}m apart)");
@@ -160,6 +189,50 @@ namespace CCP.AddressMatcher.Services
             return keyComponents.All(key => 
                 comp1.ContainsKey(key) && comp2.ContainsKey(key) &&
                 string.Equals(comp1[key], comp2[key], StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Helper method to check if addresses have same street number
+        private bool SameStreetNumber(Dictionary<string, string> comp1, Dictionary<string, string> comp2)
+        {
+            return !string.IsNullOrEmpty(comp1["street_number"]) && 
+                   !string.IsNullOrEmpty(comp2["street_number"]) &&
+                   string.Equals(comp1["street_number"], comp2["street_number"], StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Helper method to check if addresses have same street
+        private bool SameStreet(Dictionary<string, string> comp1, Dictionary<string, string> comp2)
+        {
+            return !string.IsNullOrEmpty(comp1["route"]) && 
+                   !string.IsNullOrEmpty(comp2["route"]) &&
+                   string.Equals(comp1["route"], comp2["route"], StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Helper method for corporate campus detection
+        private bool IsPotentialCorporateCampus(Dictionary<string, string> comp1, Dictionary<string, string> comp2, double distance)
+        {
+            // Same city and within reasonable campus distance
+            var sameCity = string.Equals(comp1["locality"], comp2["locality"], StringComparison.OrdinalIgnoreCase);
+            var reasonableDistance = distance <= 1000; // 1km max for campus
+            
+            // Known corporate campus patterns
+            var address1 = $"{comp1["route"]} {comp1["locality"]}".ToLower();
+            var address2 = $"{comp2["route"]} {comp2["locality"]}".ToLower();
+            
+            // Microsoft campus detection
+            var microsoftCampus = (address1.Contains("microsoft") || address1.Contains("redmond")) &&
+                                 (address2.Contains("microsoft") || address2.Contains("redmond")) &&
+                                 comp1["locality"].Equals("redmond", StringComparison.OrdinalIgnoreCase);
+            
+            // Add other known corporate campuses here as needed
+            // var appleCampus = (address1.Contains("infinite loop") || address1.Contains("cupertino")) &&
+            //                   (address2.Contains("infinite loop") || address2.Contains("cupertino")) &&
+            //                   comp1["locality"].Equals("cupertino", StringComparison.OrdinalIgnoreCase);
+            
+            // var googleCampus = (address1.Contains("amphitheatre") || address1.Contains("mountain view")) &&
+            //                    (address2.Contains("amphitheatre") || address2.Contains("mountain view")) &&
+            //                    comp1["locality"].Equals("mountain view", StringComparison.OrdinalIgnoreCase);
+            
+            return sameCity && reasonableDistance && microsoftCampus;
         }
     }
 
