@@ -9,7 +9,7 @@ A **hybrid deterministic address normalization and matching system** using:
 
 ## 🚀 Live Demo
 
-- **Frontend (Vercel):** [ccp-address-matcher.vercel.app](https://ccp-address-matcher-byuc20ex5-pau-reis-projects.vercel.app/)
+- **Frontend (Vercel):** [ccp-address-matcher.vercel.app](https://https://ccp-address-matcher-b64ieras2-pau-reis-projects.vercel.app/)
 
 ## 🛠️ Features
 
