@@ -95,6 +95,10 @@ namespace CCP.AddressMatcher.Services
             var components1 = ExtractAddressComponents(result1.AddressComponents);
             var components2 = ExtractAddressComponents(result2.AddressComponents);
 
+            // Add debugging for street numbers
+            Console.WriteLine($"Address 1 components: Street={components1["street_number"]}, Route={components1["route"]}");
+            Console.WriteLine($"Address 2 components: Street={components2["street_number"]}, Route={components2["route"]}");
+
             if (ComponentsMatch(components1, components2))
             {
                 return (true, 0.85, "All key address components match");
@@ -109,13 +113,19 @@ namespace CCP.AddressMatcher.Services
             if (distance <= 15) // Strict - likely same building but different entrances
             {
                 // Additional check: same street number
-                if (SameStreetNumber(components1, components2))
+                var sameStreetNum = SameStreetNumber(components1, components2);
+                Console.WriteLine($"Same street number check: {sameStreetNum}");
+                
+                if (sameStreetNum)
                 {
                     return (true, 0.75, $"Same building ({Math.Round(distance)}m apart)");
                 }
                 else
                 {
-                    return (false, 0.40, $"Very close but different buildings ({Math.Round(distance)}m apart)");
+                    // Add more detailed reasoning about why they don't match
+                    var street1 = components1["street_number"];
+                    var street2 = components2["street_number"];
+                    return (false, 0.40, $"Different buildings - street numbers don't match ({street1} vs {street2}), {Math.Round(distance)}m apart");
                 }
             }
 
@@ -191,12 +201,46 @@ namespace CCP.AddressMatcher.Services
                 string.Equals(comp1[key], comp2[key], StringComparison.OrdinalIgnoreCase));
         }
 
-        // Helper method to check if addresses have same street number
+        // Improved helper method to check if addresses have same street number
         private bool SameStreetNumber(Dictionary<string, string> comp1, Dictionary<string, string> comp2)
         {
-            return !string.IsNullOrEmpty(comp1["street_number"]) && 
-                   !string.IsNullOrEmpty(comp2["street_number"]) &&
-                   string.Equals(comp1["street_number"], comp2["street_number"], StringComparison.OrdinalIgnoreCase);
+            var streetNum1 = comp1["street_number"];
+            var streetNum2 = comp2["street_number"];
+            
+            // If either is empty, try to extract from formatted address as fallback
+            if (string.IsNullOrEmpty(streetNum1) || string.IsNullOrEmpty(streetNum2))
+            {
+                Console.WriteLine("Street number missing from components, trying fallback extraction");
+                return false; // Conservative approach - if we can't extract street numbers, don't match
+            }
+            
+            // Extract numeric part from street numbers (handles cases like 221B vs 223)
+            var num1 = ExtractNumericPart(streetNum1);
+            var num2 = ExtractNumericPart(streetNum2);
+            
+            Console.WriteLine($"Extracted numbers: {num1} vs {num2}");
+            
+            if (num1 == null || num2 == null)
+                return false;
+            
+            // Must be exactly the same number
+            return num1 == num2;
+        }
+
+        // Helper method to extract numeric part from street number
+        private int? ExtractNumericPart(string streetNumber)
+        {
+            if (string.IsNullOrEmpty(streetNumber))
+                return null;
+            
+            // Use regex to extract first number from string like "221B" -> 221
+            var match = System.Text.RegularExpressions.Regex.Match(streetNumber, @"^\d+");
+            if (match.Success && int.TryParse(match.Value, out int number))
+            {
+                return number;
+            }
+            
+            return null;
         }
 
         // Helper method to check if addresses have same street

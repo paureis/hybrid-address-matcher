@@ -5,18 +5,18 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 Console.WriteLine("Google API Key: " + builder.Configuration["GoogleApiKey"]);
+Console.WriteLine("USPS User ID: " + builder.Configuration["USPSUserId"]);
+Console.WriteLine("OpenAI API Key: " + (string.IsNullOrEmpty(builder.Configuration["OpenAIApiKey"]) ? "Not configured" : "Configured"));
 
-// Register services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
-
-// Register existing services
 builder.Services.AddScoped<GoogleAddressValidatorService>();
-
-// Register new geocoding comparison service
 builder.Services.AddScoped<GoogleGeocodingService>();
 builder.Services.AddScoped<AddressMatchingService>();
+builder.Services.AddScoped<USPSValidationService>();
+builder.Services.AddScoped<LLMFallbackService>();  
+builder.Services.AddScoped<EnhancedAddressMatchingService>();
 
 // Add memory cache for geocoding results to reduce API calls
 builder.Services.AddMemoryCache();
@@ -97,7 +97,7 @@ app.MapPost("/api/hybrid-compare", (CompareRequest request) =>
     });
 });
 
-// 🎯 NEW: Geocoding-based comparison endpoint
+// 🎯 Geocoding-based comparison endpoint (keep existing)
 app.MapPost("/api/geocoding-compare", async (AddressMatchingService matchingService, CompareRequest request) =>
 {
     try
@@ -142,7 +142,7 @@ app.MapPost("/api/geocoding-compare", async (AddressMatchingService matchingServ
     }
 });
 
-// 🔄 NEW: Smart comparison endpoint (tries geocoding first, falls back to local)
+// 🔄 Smart comparison endpoint (keep existing)
 app.MapPost("/api/smart-compare", async (AddressMatchingService matchingService, CompareRequest request) =>
 {
     try
@@ -215,7 +215,87 @@ app.MapPost("/api/smart-compare", async (AddressMatchingService matchingService,
     }
 });
 
-// 📊 NEW: Batch comparison endpoint for testing multiple addresses
+// 🏆 NEW: Enhanced multi-layer comparison endpoint (ALL 5 LAYERS)
+app.MapPost("/api/enhanced-compare", async (EnhancedAddressMatchingService enhancedService, CompareRequest request) =>
+{
+    try
+    {
+        var result = await enhancedService.CompareAddressesAsync(request.Address1, request.Address2);
+        
+        return Results.Ok(new
+        {
+            match = result.Match,
+            confidence = result.Confidence,
+            method = result.Method,
+            reason = result.Reason,
+            layersUsed = result.LayersUsed,
+            distanceMeters = result.DistanceMeters,
+            rawAddresses = new
+            {
+                address1 = request.Address1,
+                address2 = request.Address2
+            }
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// 🧪 NEW: USPS validation testing endpoint
+app.MapPost("/api/usps-validate", async (USPSValidationService uspsService, GoogleRequest request) =>
+{
+    try
+    {
+        var validated = await uspsService.ValidateAddressAsync(request.Address);
+        
+        if (validated != null)
+        {
+            return Results.Ok(new 
+            { 
+                success = true,
+                originalAddress = request.Address,
+                validatedAddress = validated 
+            });
+        }
+        else
+        {
+            return Results.BadRequest(new { success = false, error = "USPS validation failed" });
+        }
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { success = false, error = ex.Message });
+    }
+});
+
+// 🤖 NEW: LLM fallback testing endpoint
+app.MapPost("/api/llm-evaluate", async (LLMFallbackService llmService, LLMRequest request) =>
+{
+    try
+    {
+        var result = await llmService.EvaluateAddressMatchAsync(request.Address1, request.Address2, request.Context ?? "");
+        
+        return Results.Ok(new
+        {
+            match = result.Match,
+            confidence = result.Confidence,
+            reasoning = result.Reasoning,
+            rawAddresses = new
+            {
+                address1 = request.Address1,
+                address2 = request.Address2
+            }
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// 📊 Batch comparison endpoint (keep existing)
 app.MapPost("/api/batch-compare", async (AddressMatchingService matchingService, BatchCompareRequest request) =>
 {
     var results = new List<object>();
@@ -271,17 +351,198 @@ app.MapPost("/api/batch-compare", async (AddressMatchingService matchingService,
     });
 });
 
+// 🎯 NEW: Enhanced batch comparison with all layers
+app.MapPost("/api/enhanced-batch-compare", async (EnhancedAddressMatchingService enhancedService, BatchCompareRequest request) =>
+{
+    var results = new List<object>();
+    
+    foreach (var pair in request.AddressPairs)
+    {
+        try
+        {
+            var result = await enhancedService.CompareAddressesAsync(pair.Address1, pair.Address2);
+            results.Add(new
+            {
+                address1 = pair.Address1,
+                address2 = pair.Address2,
+                expected = pair.Expected,
+                match = result.Match,
+                confidence = result.Confidence,
+                method = result.Method,
+                reason = result.Reason,
+                layersUsed = result.LayersUsed,
+                correct = pair.Expected == null ? (bool?)null : pair.Expected == result.Match
+            });
+        }
+        catch (Exception ex)
+        {
+            results.Add(new
+            {
+                address1 = pair.Address1,
+                address2 = pair.Address2,
+                expected = pair.Expected,
+                error = ex.Message,
+                match = false,
+                confidence = 0.0,
+                method = "error"
+            });
+        }
+        
+        // Add small delay to respect API rate limits
+        await Task.Delay(150);
+    }
+    
+    var summary = new
+    {
+        totalPairs = results.Count,
+        correctPredictions = results.Count(r => {
+            var correctProp = r.GetType().GetProperty("correct")?.GetValue(r) as bool?;
+            return correctProp == true;
+        }),
+        accuracy = CalculateAccuracy(results),
+        methodBreakdown = results.GroupBy(r => r.GetType().GetProperty("method")?.GetValue(r)?.ToString() ?? "unknown")
+                                 .ToDictionary(g => g.Key, g => g.Count())
+    };
+    
+    return Results.Ok(new
+    {
+        results = results,
+        summary = summary
+    });
+});
+
+// 🧪 Simple OpenAI test endpoint
+app.MapPost("/api/test-openai-simple", async () =>
+{
+    try
+    {
+        var httpClient = new HttpClient();
+        var apiKey = builder.Configuration["OpenAIApiKey"];
+        
+        Console.WriteLine($"Testing with API Key: {apiKey?.Substring(0, 20)}...");
+        
+        var request = new
+        {
+            model = "gpt-4o-mini",
+            messages = new[] { new { role = "user", content = "Say hello" } },
+            max_tokens = 10
+        };
+
+        var json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        
+        httpClient.DefaultRequestHeaders.Authorization = 
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        var response = await httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
+        var responseText = await response.Content.ReadAsStringAsync();
+        
+        Console.WriteLine($"Raw OpenAI Response: {responseText}");
+        
+        return Results.Ok(new { 
+            status = response.StatusCode.ToString(), 
+            response = responseText 
+        });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// 🎯 Simple Enhanced Compare (working version)
+app.MapPost("/api/simple-enhanced-compare", async (AddressMatchingService matchingService, LLMFallbackService llmService, CompareRequest request) =>
+{
+    try
+    {
+        Console.WriteLine($"Simple Enhanced: Starting comparison for {request.Address1} vs {request.Address2}");
+        
+        // Layer 0: Normalization
+        var normalized1 = AddressNormalizer.Normalize(request.Address1);
+        var normalized2 = AddressNormalizer.Normalize(request.Address2);
+        
+        if (normalized1?.ToString() == normalized2?.ToString())
+        {
+            Console.WriteLine("Simple Enhanced: Match found at normalization layer");
+            return Results.Ok(new
+            {
+                match = true,
+                confidence = 1.0,
+                method = "normalization",
+                reason = "Identical after normalization",
+                layersUsed = new[] { "Layer 0: Normalize" }
+            });
+        }
+
+        // Layer 2-3: Geocoding + Place ID
+        try
+        {
+            var geoResult = await matchingService.CompareAddressesAsync(request.Address1, request.Address2);
+            Console.WriteLine($"Simple Enhanced: Geocoding result - Match: {geoResult.Match}, Confidence: {geoResult.Confidence}");
+            
+            if (geoResult.Confidence >= 0.3)
+            {
+                Console.WriteLine($"Simple Enhanced: Using geocoding result");
+                return Results.Ok(new
+                {
+                    match = geoResult.Match,
+                    confidence = geoResult.Confidence,
+                    method = "geocoding",
+                    reason = geoResult.Reason,
+                    layersUsed = new[] { "Layer 0: Normalize", "Layer 2: Geocoding" },
+                    distanceMeters = geoResult.DistanceMeters
+                });
+            }
+            else
+            {
+                Console.WriteLine($"Simple Enhanced: Geocoding confidence too low ({geoResult.Confidence}), going to LLM");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Simple Enhanced: Geocoding failed: {ex.Message}");
+        }
+
+        // Layer 4: LLM Fallback
+        try
+        {
+            Console.WriteLine("Simple Enhanced: Using LLM fallback");
+            var llmResult = await llmService.EvaluateAddressMatchAsync(request.Address1, request.Address2, "Previous layers failed or low confidence");
+            
+            return Results.Ok(new
+            {
+                match = llmResult.Match,
+                confidence = llmResult.Confidence,
+                method = "llm_fallback",
+                reason = llmResult.Reasoning,
+                layersUsed = new[] { "Layer 0: Normalize", "Layer 2: Geocoding (failed)", "Layer 4: LLM Fallback" }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Simple Enhanced: LLM failed: {ex.Message}");
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 // Helper function for calculating accuracy
 static double CalculateAccuracy(List<object> results)
 {
     var withExpected = results.Where(r => r.GetType().GetProperty("expected")?.GetValue(r) != null).ToList();
     if (withExpected.Count == 0) return 0.0;
-    
-    var correct = withExpected.Count(r => {
+
+    var correct = withExpected.Count(r =>
+    {
         var correctProp = r.GetType().GetProperty("correct")?.GetValue(r) as bool?;
         return correctProp == true;
     });
-    
+
     return (double)correct / withExpected.Count;
 }
 
@@ -290,5 +551,6 @@ app.Run();
 // Request types
 record CompareRequest(string Address1, string Address2);
 record GoogleRequest(string Address);
+record LLMRequest(string Address1, string Address2, string? Context = null);
 record BatchCompareRequest(List<AddressPair> AddressPairs);
 record AddressPair(string Address1, string Address2, bool? Expected = null);
