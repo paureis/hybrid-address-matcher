@@ -1,4 +1,4 @@
-// src/App.jsx - Updated with smart geocoding comparison
+// src/App.jsx - Fixed for enhanced-compare endpoint
 
 import React, { useState } from 'react';
 
@@ -20,11 +20,14 @@ function App() {
     setResult(null);
 
     try {
-      // 🎯 UPDATED: Using smart-compare instead of hybrid-compare
-      const response = await fetch(`${backendUrl}/api/smart-compare`, {
+      // 🎯 FIXED: Using enhanced-compare for single comparison
+      const response = await fetch(`${backendUrl}/api/enhanced-compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address1, address2 }),
+        body: JSON.stringify({ 
+          address1: address1, 
+          address2: address2 
+        }),
       });
 
       if (!response.ok) {
@@ -34,10 +37,10 @@ function App() {
       }
 
       const data = await response.json();
-      console.log('Smart Compare Response:', data);
+      console.log('Enhanced Compare Response:', data);
       setResult(data);
     } catch (err) {
-      console.error('Smart comparison error:', err);
+      console.error('Enhanced comparison error:', err);
       setError('An error occurred while comparing the addresses. Please try again.');
     } finally {
       setLoading(false);
@@ -46,7 +49,10 @@ function App() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-      <h1 className="text-3xl font-bold mb-6">Smart Address Matching</h1>
+      <h1 className="text-3xl font-bold mb-6">Enhanced Address Matching</h1>
+      <p className="text-gray-400 mb-6 text-center">
+        5-Layer AI-Powered Address Validation System
+      </p>
 
       <form onSubmit={handleSubmit} className="bg-gray-800 p-6 rounded shadow-md w-full max-w-md space-y-4">
         <div>
@@ -56,7 +62,7 @@ function App() {
             type="text"
             value={address1}
             onChange={(e) => setAddress1(e.target.value)}
-            placeholder="e.g., 123 Main St, City, State, ZIP"
+            placeholder="e.g., 600 Montgomery St, San Francisco, CA 94111"
             className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring"
             required
           />
@@ -69,7 +75,7 @@ function App() {
             type="text"
             value={address2}
             onChange={(e) => setAddress2(e.target.value)}
-            placeholder="e.g., 123 Main St, City, State, ZIP"
+            placeholder="e.g., 600 Montgomery Street Suite 1500, San Francisco, CA 94111"
             className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring"
             required
           />
@@ -80,7 +86,7 @@ function App() {
           disabled={loading}
           className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold disabled:opacity-50"
         >
-          {loading ? 'Comparing...' : 'Compare Addresses'}
+          {loading ? 'Analyzing...' : 'Compare Addresses'}
         </button>
       </form>
 
@@ -90,48 +96,12 @@ function App() {
         {error && <p className="text-red-400">{error}</p>}
 
         {result && (
-          <div className="space-y-2">
-            {/* Show method used */}
-            <div>
-              <span className="font-semibold">Method Used:</span>
-              <p className="text-blue-400 capitalize">{result.method || 'geocoding'}</p>
-            </div>
-
-            {/* Show geocoded addresses if available */}
-            {result.geocodedAddresses && (
-              <>
-                <div>
-                  <span className="font-semibold">Geocoded Address 1:</span>
-                  <p className="text-green-400 break-words">{result.geocodedAddresses.address1}</p>
-                </div>
-
-                <div>
-                  <span className="font-semibold">Geocoded Address 2:</span>
-                  <p className="text-green-400 break-words">{result.geocodedAddresses.address2}</p>
-                </div>
-              </>
-            )}
-
-            {/* Show normalized addresses if no geocoding (fallback) */}
-            {result.normalizedAddresses && (
-              <>
-                <div>
-                  <span className="font-semibold">Normalized Address 1:</span>
-                  <p className="text-green-400 break-words">{result.normalizedAddresses.address1}</p>
-                </div>
-
-                <div>
-                  <span className="font-semibold">Normalized Address 2:</span>
-                  <p className="text-green-400 break-words">{result.normalizedAddresses.address2}</p>
-                </div>
-              </>
-            )}
-
+          <div className="space-y-3">
             {/* Match result with confidence */}
-            <div>
+            <div className="border-b border-gray-600 pb-2">
               <span className="font-semibold">Match Result:</span>
-              <p className={result.match ? 'text-green-400' : 'text-red-400'}>
-                {result.match ? '✅ Addresses match' : '❌ Addresses do not match'}
+              <p className={result.match ? 'text-green-400 text-lg font-bold' : 'text-red-400 text-lg font-bold'}>
+                {result.match ? '✅ Addresses Match' : '❌ Different Addresses'}
               </p>
               {result.confidence && (
                 <p className="text-gray-400 text-sm">
@@ -140,16 +110,44 @@ function App() {
               )}
             </div>
 
+            {/* Method and layers used */}
+            <div>
+              <span className="font-semibold">Method Used:</span>
+              <p className="text-blue-400 capitalize">{result.method}</p>
+              
+              {result.layersUsed && (
+                <div className="mt-1">
+                  <span className="text-sm font-semibold">Layers Processed:</span>
+                  <ul className="text-sm text-gray-300 ml-4">
+                    {result.layersUsed.map((layer, index) => (
+                      <li key={index} className="list-disc">{layer}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             {/* Show reason */}
             {result.reason && (
               <div>
-                <span className="font-semibold">Reason:</span>
-                <p className="text-yellow-300">{result.reason}</p>
+                <span className="font-semibold">Analysis:</span>
+                <p className="text-yellow-300 text-sm">{result.reason}</p>
+              </div>
+            )}
+
+            {/* Show geocoded addresses if available */}
+            {result.rawAddresses && (
+              <div>
+                <span className="font-semibold">Original Addresses:</span>
+                <div className="text-sm text-gray-300 mt-1">
+                  <p><strong>1:</strong> {result.rawAddresses.address1}</p>
+                  <p><strong>2:</strong> {result.rawAddresses.address2}</p>
+                </div>
               </div>
             )}
 
             {/* Show distance if available */}
-            {result.distanceMeters !== undefined && (
+            {result.distanceMeters !== undefined && result.distanceMeters !== null && (
               <div>
                 <span className="font-semibold">Distance:</span>
                 <p className="text-blue-400">
@@ -158,33 +156,26 @@ function App() {
               </div>
             )}
 
-            {/* Show differences if in fallback mode */}
-            {result.differences && result.differences.length > 0 && (
-              <div>
-                <span className="font-semibold">Differences:</span>
-                <ul className="list-disc list-inside text-yellow-300">
-                  {result.differences.map((diff, index) => (
-                    <li key={index}>{diff}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Show geocoding attempt info if fallback was used */}
-            {result.geocodingAttempt && (
-              <div>
-                <span className="font-semibold">Note:</span>
-                <p className="text-orange-400 text-sm">
-                  Geocoding had low confidence ({Math.round(result.geocodingAttempt.confidence * 100)}%), 
-                  used local matching instead.
-                </p>
-              </div>
-            )}
+            {/* Performance stats */}
+            <div className="mt-4 pt-2 border-t border-gray-600">
+              <p className="text-xs text-gray-500">
+                Enhanced 5-Layer Validation System: Normalization → USPS → Geocoding → Place ID → AI Analysis
+              </p>
+            </div>
           </div>
         )}
 
         {!error && !result && (
-          <p className="text-gray-400 italic">Comparison results will appear here after submission.</p>
+          <div className="text-center">
+            <p className="text-gray-400 italic mb-2">Enhanced comparison results will appear here</p>
+            <div className="text-xs text-gray-500">
+              <p>🔍 Layer 1: Address Normalization</p>
+              <p>📮 Layer 2: USPS Validation</p>
+              <p>🌍 Layer 3: Google Geocoding</p>
+              <p>📍 Layer 4: Place ID Matching</p>
+              <p>🤖 Layer 5: AI Analysis</p>
+            </div>
+          </div>
         )}
       </div>
     </div>
