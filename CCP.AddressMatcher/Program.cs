@@ -20,15 +20,19 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        builder => builder.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader());
+    options.AddPolicy("AllowFrontend",
+        policy => policy.WithOrigins(
+            "https://ccp-address-matcher.vercel.app",
+            "http://localhost:5173",  // Vite dev server
+            "http://localhost:3000"   // Alternative React dev port
+        )
+        .AllowAnyMethod()
+        .AllowAnyHeader());
 });
 
 var app = builder.Build();
 
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend");
 
 if (app.Environment.IsDevelopment())
 {
