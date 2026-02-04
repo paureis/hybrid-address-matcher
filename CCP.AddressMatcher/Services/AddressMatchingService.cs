@@ -282,20 +282,4 @@ namespace CCP.AddressMatcher.Services
         }
     }
 
-    public class AddressMatchResult
-    {
-        public bool Match { get; set; }
-        public double Confidence { get; set; }
-        public string Reason { get; set; } = "";
-        public bool PlaceIdMatch { get; set; }
-        public string GeocodedAddress1 { get; set; } = "";
-        public string GeocodedAddress2 { get; set; } = "";
-        public double DistanceMeters { get; set; }
-        public double Latitude1 { get; set; }
-        public double Longitude1 { get; set; }
-        public double Latitude2 { get; set; }
-        public double Longitude2 { get; set; }
-        public string? LocationType1 { get; set; }
-        public string? LocationType2 { get; set; }
-    }
 }
