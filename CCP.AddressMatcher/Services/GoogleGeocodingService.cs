@@ -1,5 +1,5 @@
 using CCP.AddressMatcher.Models;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 using System.Text.Json;
 
 namespace CCP.AddressMatcher.Services
@@ -8,14 +8,20 @@ namespace CCP.AddressMatcher.Services
     {
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
-        private readonly IMemoryCache _cache;
+        private readonly IDistributedCache _cache;
+        private readonly ILogger<GoogleGeocodingService> _logger;
         private readonly string _apiKey;
 
-        public GoogleGeocodingService(HttpClient httpClient, IConfiguration configuration, IMemoryCache cache)
+        public GoogleGeocodingService(
+            HttpClient httpClient, 
+            IConfiguration configuration, 
+            IDistributedCache cache,
+            ILogger<GoogleGeocodingService> logger)
         {
             _httpClient = httpClient;
             _configuration = configuration;
             _cache = cache;
+            _logger = logger;
             _apiKey = _configuration["GoogleApiKey"] ?? throw new InvalidOperationException("Google API Key not configured");
         }
 
@@ -23,9 +29,19 @@ namespace CCP.AddressMatcher.Services
         {
             // Check cache first to avoid unnecessary API calls
             var cacheKey = $"geocode_{address}";
-            if (_cache.TryGetValue(cacheKey, out GoogleGeocodeResponse? cachedResult))
+            
+            try
             {
-                return cachedResult;
+                var cachedJson = await _cache.GetStringAsync(cacheKey);
+                if (!string.IsNullOrEmpty(cachedJson))
+                {
+                    _logger.LogDebug("Cache hit for address: {Address}", address);
+                    return JsonSerializer.Deserialize<GoogleGeocodeResponse>(cachedJson);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cache retrieval failed for {Address}, proceeding without cache", address);
             }
 
             try
@@ -45,13 +61,26 @@ namespace CCP.AddressMatcher.Services
                 // Cache the result for 1 hour to reduce API calls
                 if (geocodeResponse != null)
                 {
-                    _cache.Set(cacheKey, geocodeResponse, TimeSpan.FromHours(1));
+                    try
+                    {
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
+                        };
+                        await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(geocodeResponse), cacheOptions);
+                        _logger.LogDebug("Cached geocoding result for: {Address}", address);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to cache result for {Address}", address);
+                    }
                 }
 
                 return geocodeResponse;
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Geocoding failed for address: {Address}", address);
                 throw new Exception($"Geocoding failed for address '{address}': {ex.Message}", ex);
             }
         }

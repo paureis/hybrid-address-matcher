@@ -15,8 +15,21 @@ builder.Services.AddScoped<USPSValidationService>();
 builder.Services.AddScoped<LLMFallbackService>();  
 builder.Services.AddScoped<EnhancedAddressMatchingService>();
 
-// Add memory cache for geocoding results to reduce API calls
-builder.Services.AddMemoryCache();
+// Register Redis distributed cache (falls back to in-memory if not configured)
+var redisConnection = builder.Configuration["RedisConnection"];
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.InstanceName = "AddressMatcher:";
+    });
+}
+else
+{
+    // Fallback to in-memory cache for local development
+    builder.Services.AddDistributedMemoryCache();
+}
 
 builder.Services.AddCors(options =>
 {
@@ -24,7 +37,8 @@ builder.Services.AddCors(options =>
         policy => policy.WithOrigins(
             "https://ccp-address-matcher.vercel.app",
             "http://localhost:5173",  // Vite dev server
-            "http://localhost:3000"   // Alternative React dev port
+            "http://localhost:3000",  // Alternative React dev port
+            "http://localhost:5000"   // .NET default dev port
         )
         .AllowAnyMethod()
         .AllowAnyHeader());
