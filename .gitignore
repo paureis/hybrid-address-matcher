@@ -52,3 +52,7 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+## Secrets & Config
+CCP.AddressMatcher/appsettings.json
+CCP.AddressMatcher/appsettings.*.json
+!CCP.AddressMatcher/appsettings.Example.json
