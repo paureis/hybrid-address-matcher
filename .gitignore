@@ -56,3 +56,6 @@ nunit-*.xml
 CCP.AddressMatcher/appsettings.json
 CCP.AddressMatcher/appsettings.*.json
 !CCP.AddressMatcher/appsettings.Example.json
+
+## Build outputs
+CCP.AddressMatcher/publish/
