@@ -1,117 +1,216 @@
-CCP Address Matcher
-Smart Geocoding-Based Address Matching System with intelligent fallback to local normalization.
-A robust address comparison system that uses Google Geocoding API for high-accuracy matching, with seamless fallback to deterministic local normalization when needed.
+# Hybrid Address Matcher
 
-🚀 Live Demo
+Smart multi-layer address validation system combining deterministic algorithms, Google Geocoding API, and AI-powered fallback logic.
 
-Frontend (Vercel): ccp-address-matcher.vercel.app
-Backend API (Azure): https://ccp-address-matcher-backend-a9eze9fmf8dvccga.eastus-01.azurewebsites.net
+## 🚀 Live Demo
 
-✨ Key Features
-✅ Smart Geocoding - Uses Google Maps API for precise address matching
-✅ Same Building Detection - Correctly identifies addresses with different suite/apartment numbers
-✅ Intelligent Fallback - Falls back to local normalization if geocoding fails
-✅ Confidence Scoring - Provides match confidence percentages
-✅ Multiple Comparison Methods - Place ID, formatted address, components, and distance-based matching
-✅ International Support - Works with addresses worldwide
-✅ Production Ready - Deployed on Azure App Services with proper error handling
-🎯 Problem Solved
+- **Frontend:** [ccp-address-matcher.vercel.app](https://ccp-address-matcher.vercel.app)
+- **Backend API:** Deployed on Azure App Service
 
-Traditional string-based address matching fails on common variations:
+## ✨ Key Features
 
-❌ 17399 SW 54th St, Miramar, FL vs 17399 SW 54th St Suite 205, Miramar, FL
-❌ 1600 Pennsylvania Ave NW vs 1600 Pennsylvania Avenue Northwest
-❌ 17399 Sw 54th St, Miramar vs 17399 Sw 54th St, Miramar, FL
+✅ **Multi-Layer Validation** - 5 distinct validation methods with intelligent fallback  
+✅ **Same Building Detection** - Correctly identifies addresses with different suite/apartment numbers  
+✅ **High Accuracy** - 85-95% confidence for valid addresses using Google Geocoding  
+✅ **AI Fallback** - GPT-4o-mini handles edge cases when traditional methods fail  
+✅ **Production Ready** - Deployed with proper logging, error handling, and security  
+✅ **Comprehensive Testing** - Full test suite with xUnit
 
-Our system correctly identifies these as same building/location with high confidence.
-🏗️ Tech Stack
-Frontend:
+## 🏗️ Architecture
+```
+┌─────────────────────────────────────────┐
+│           React Frontend (Vercel)       │
+│        TailwindCSS + Modern UI          │
+└──────────────┬──────────────────────────┘
+               │ HTTPS/CORS
+               ↓
+┌─────────────────────────────────────────┐
+│      .NET 8 Web API (Azure)             │
+├─────────────────────────────────────────┤
+│  Layer 0: Local Normalization           │
+│  Layer 1: USPS Validation (Mock)        │
+│  Layer 2: Google Geocoding API          │
+│  Layer 3: Place ID Matching             │
+│  Layer 4: LLM Fallback (GPT-4o-mini)    │
+└─────────────────────────────────────────┘
+```
 
-React 18 + Vite
-TailwindCSS for styling
-Deployed on Vercel
+### Validation Layers
 
-Backend:
+1. **Layer 0: Normalization** - Standardizes street types, state abbreviations, removes unit numbers
+2. **Layer 1: USPS Validation** - CASS-certified address standardization (mock mode)
+3. **Layer 2: Geocoding** - Google Maps API for precise geolocation
+4. **Layer 3: Place ID** - Unique Google identifier matching
+5. **Layer 4: AI Analysis** - GPT-4o-mini for complex edge cases
 
-.NET 8 (C#) Web API
-Google Maps Geocoding API integration
-Memory caching for API optimization
-Deployed on Azure App Services
+## 🛠️ Tech Stack
 
-Tools:
+**Backend:**
+- .NET 8.0 (C#)
+- ASP.NET Core Web API
+- Google Maps Geocoding API
+- OpenAI GPT-4o-mini API
+- xUnit for testing
 
-Thunder Client for API testing
-Azure Portal for cloud management
-Google Cloud Console for API management
+**Frontend:**
+- React 19
+- Vite (build tool)
+- TailwindCSS
+- Vercel deployment
 
-🚦 API Endpoints
-Smart Comparison (Recommended)
-httpPOST /api/smart-compare
-Content-Type: application/json
+**Infrastructure:**
+- Azure App Service (backend)
+- Vercel (frontend)
+- GitHub Actions (CI/CD)
 
-🛠️ Local Development
-Prerequisites
+## 📦 Getting Started
 
-.NET 8 SDK
-Node.js 18+
-Google Maps API key with Geocoding API enabled
+### Prerequisites
 
-Backend Setup
-bashcd CCP.AddressMatcher
-dotnet restore
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Node.js 18+](https://nodejs.org/)
+- Google Maps API key ([Get one here](https://console.cloud.google.com/))
+- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+
+### Backend Setup
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/paureis/hybrid-address-matcher.git
+cd hybrid-address-matcher
+```
+
+2. **Configure API keys using .NET User Secrets**
+```bash
+cd CCP.AddressMatcher
+dotnet user-secrets init
+dotnet user-secrets set "GoogleApiKey" "your-google-api-key"
+dotnet user-secrets set "OpenAIApiKey" "your-openai-api-key"
+```
+
+3. **Run the backend**
+```bash
 dotnet run
-Frontend Setup
-bashcd frontend
+```
+
+The API will be available at `https://localhost:5001` and `http://localhost:5000`
+
+4. **View API documentation**
+```
+http://localhost:5000/swagger
+```
+
+### Frontend Setup
+
+1. **Navigate to frontend directory**
+```bash
+cd frontend
+```
+
+2. **Create environment file**
+```bash
+# Create .env file
+echo "VITE_BACKEND_URL=http://localhost:5000" > .env
+```
+
+3. **Install dependencies and run**
+```bash
 npm install
 npm run dev
-Environment Configuration
-Backend (appsettings.json):
-json{
-  "GoogleApiKey": "your-google-api-key-here"
+```
+
+The frontend will be available at `http://localhost:5173`
+
+## 🧪 Running Tests
+```bash
+cd CCP.AddressMatcher.Tests
+dotnet test
+```
+
+All tests should pass with 100% success rate.
+
+## 🔒 Security
+
+- API keys stored in Azure Key Vault (production) and User Secrets (local)
+- CORS restricted to known frontend origins only
+- No sensitive data logged
+- Rate limiting on API calls
+- `.gitignore` configured to prevent secret exposure
+
+## 📊 API Endpoints
+
+### Primary Endpoint
+
+**POST** `/api/enhanced-compare` - Multi-layer address validation
+
+**Request:**
+```json
+{
+  "address1": "600 Montgomery St, San Francisco, CA 94111",
+  "address2": "600 Montgomery Street Suite 1500, San Francisco, CA 94111"
 }
-Frontend (.env):
-envVITE_BACKEND_URL=http://localhost:5000
+```
 
-🔧 Configuration
-Google API Setup
+**Response:**
+```json
+{
+  "match": true,
+  "confidence": 0.95,
+  "method": "geocoding",
+  "reason": "Identical Place ID",
+  "layersUsed": ["Layer 0: Normalize", "Layer 2: Geocoding"],
+  "distanceMeters": 0
+}
+```
 
-Go to Google Cloud Console
-Enable the Geocoding API
-Create an API key
-Add the key to your backend configuration
+### Additional Endpoints
 
-Azure Deployment
+- `/api/compare-addresses` - Local normalization only
+- `/api/google-validate` - Google API validation
+- `/api/geocoding-compare` - Geocoding-based comparison
+- `/api/smart-compare` - Smart fallback logic
+- `/api/enhanced-batch-compare` - Batch processing
 
-Create an Azure App Service
-Add GoogleApiKey to Application Settings
-Deploy the .NET application
+See Swagger documentation for complete API reference.
 
-Vercel Deployment
+## 🚀 Deployment
 
-Connect your GitHub repository
-Set VITE_BACKEND_URL environment variable
-Deploy automatically on push
+### Backend (Azure)
 
-📊 Performance & Accuracy
+Automatic deployment via GitHub Actions on push to `main` branch.
 
-Geocoding Accuracy: 85-95% confidence for valid addresses
-API Response Time: ~300-500ms (including Google API calls)
-Caching: 1-hour memory cache reduces API costs
-Fallback Success: Local normalization handles edge cases
-Cost Optimization: Smart caching + batch processing
+**Environment variables configured in Azure:**
+- `GoogleApiKey`
+- `OpenAIApiKey`
 
-🤝 Contributing
+### Frontend (Vercel)
 
-Fork the repository
-Create a feature branch
-Make your changes
-Test with Thunder Client or similar
-Submit a pull request
+Automatic deployment on push to `main` branch.
 
-📝 License
-This project is licensed under the MIT License.
-🔗 Links
-Live Demo: ccp-address-matcher.vercel.app
-API Documentation: Available via Swagger when running locally
-Google Geocoding API: Documentation
- 
+**Environment variable:**
+- `VITE_BACKEND_URL` - Backend API URL
+
+## 📈 Performance
+
+- **API Response Time:** ~300-500ms (including external API calls)
+- **Accuracy:** 85-95% match confidence for valid addresses
+- **Caching:** 1-hour memory cache reduces redundant API calls
+- **Rate Limiting:** Smart batching for bulk operations
+
+## 🤝 Contributing
+
+This is a portfolio project. Feedback and suggestions are always welcome!
+
+## 📝 License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## 👤 Author
+
+**Alvaro P Reis**
+- Aspiring Cloud/Backend Developer
+- GitHub: [@paureis](https://github.com/paureis)
+
+---
+
+**Built with the intention to solve real-world address matching challenges in healthcare operations**
