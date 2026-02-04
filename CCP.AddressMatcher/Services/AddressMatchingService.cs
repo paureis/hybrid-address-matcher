@@ -5,12 +5,14 @@ namespace CCP.AddressMatcher.Services
     public class AddressMatchingService
     {
         private readonly GoogleGeocodingService _geocodingService;
+        private readonly ILogger<AddressMatchingService> _logger;
 
-        public AddressMatchingService(GoogleGeocodingService geocodingService)
+        public AddressMatchingService(GoogleGeocodingService geocodingService, ILogger<AddressMatchingService> logger)
         {
             _geocodingService = geocodingService;
+            _logger = logger;
         }
-
+                    
         public async Task<AddressMatchResult> CompareAddressesAsync(string address1, string address2)
         {
             // Geocode both addresses
@@ -96,8 +98,8 @@ namespace CCP.AddressMatcher.Services
             var components2 = ExtractAddressComponents(result2.AddressComponents);
 
             // Add debugging for street numbers
-            Console.WriteLine($"Address 1 components: Street={components1["street_number"]}, Route={components1["route"]}");
-            Console.WriteLine($"Address 2 components: Street={components2["street_number"]}, Route={components2["route"]}");
+            _logger.LogDebug("Address 1 components: Street={StreetNumber}, Route={Route}", components1["street_number"], components1["route"]);
+            _logger.LogDebug("Address 2 components: Street={StreetNumber}, Route={Route}", components2["street_number"], components2["route"]);
 
             if (ComponentsMatch(components1, components2))
             {
@@ -114,7 +116,7 @@ namespace CCP.AddressMatcher.Services
             {
                 // Additional check: same street number
                 var sameStreetNum = SameStreetNumber(components1, components2);
-                Console.WriteLine($"Same street number check: {sameStreetNum}");
+                _logger.LogDebug("Same street number check: {SameStreetNum}", sameStreetNum);
                 
                 if (sameStreetNum)
                 {
@@ -218,7 +220,7 @@ namespace CCP.AddressMatcher.Services
             var num1 = ExtractNumericPart(streetNum1);
             var num2 = ExtractNumericPart(streetNum2);
             
-            Console.WriteLine($"Extracted numbers: {num1} vs {num2}");
+            _logger.LogDebug("Extracted numbers: {Num1} vs {Num2}", num1, num2);
             
             if (num1 == null || num2 == null)
                 return false;

@@ -5,23 +5,25 @@ using System.Text.Json.Serialization;
 namespace CCP.AddressMatcher.Services
 {
     public class LLMFallbackService
-    {
-        private readonly HttpClient _httpClient;
-        private readonly IConfiguration _configuration;
-        private readonly string _openAiApiKey;
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly string _openAiApiKey;
+    private readonly ILogger<LLMFallbackService> _logger;
 
-        public LLMFallbackService(HttpClient httpClient, IConfiguration configuration)
-        {
-            _httpClient = httpClient;
-            _configuration = configuration;
-            _openAiApiKey = _configuration["OpenAIApiKey"] ?? throw new InvalidOperationException("OpenAI API Key not configured");
-        }
+    public LLMFallbackService(HttpClient httpClient, IConfiguration configuration, ILogger<LLMFallbackService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _openAiApiKey = _configuration["OpenAIApiKey"] ?? throw new InvalidOperationException("OpenAI API Key not configured");
+        _logger = logger;
+    }
 
         public async Task<LLMMatchResult> EvaluateAddressMatchAsync(string address1, string address2, string context = "")
         {
             try
             {
-                Console.WriteLine($"LLM Evaluation - Address1: {address1}, Address2: {address2}");
+                _logger.LogInformation("LLM Evaluation - Address1: {Address1}, Address2: {Address2}", address1, address2);
                 
                 var prompt = BuildPrompt(address1, address2, context);
                 var response = await CallOpenAI(prompt);
@@ -29,7 +31,7 @@ namespace CCP.AddressMatcher.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"LLM Error: {ex.Message}");
+                _logger.LogError(ex, "LLM Error");
                 throw new Exception($"LLM evaluation failed: {ex.Message}", ex);
             }
         }
@@ -74,7 +76,7 @@ Respond with JSON only:
                 };
 
                 var json = JsonSerializer.Serialize(request);
-                Console.WriteLine($"OpenAI Request: {json}");
+                _logger.LogDebug("OpenAI Request: {Json}", json);
                 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 
@@ -88,8 +90,8 @@ Respond with JSON only:
                 var response = await _httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
                 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"OpenAI Response Status: {response.StatusCode}");
-                Console.WriteLine($"OpenAI Response: {responseContent}");
+                _logger.LogDebug("OpenAI Response Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("OpenAI Response: {ResponseContent}", responseContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -113,7 +115,7 @@ Respond with JSON only:
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"OpenAI Call Error: {ex.Message}");
+                _logger.LogError(ex, "OpenAI Call Error");
                 throw;
             }
         }
@@ -122,7 +124,7 @@ Respond with JSON only:
         {
             try
             {
-                Console.WriteLine($"Parsing LLM Response: {response}");
+                _logger.LogDebug("Parsing LLM Response: {Response}", response);
                 
                 var result = JsonSerializer.Deserialize<LLMMatchResult>(response, new JsonSerializerOptions 
                 { 
@@ -138,7 +140,7 @@ Respond with JSON only:
             }
             catch (JsonException ex)
             {
-                Console.WriteLine($"JSON Parse Error: {ex.Message}");
+                _logger.LogWarning(ex, "JSON Parse Error");
                 return new LLMMatchResult 
                 { 
                     Match = false, 
@@ -148,7 +150,7 @@ Respond with JSON only:
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Parse Error: {ex.Message}");
+                _logger.LogWarning(ex, "Parse Error");
                 return new LLMMatchResult 
                 { 
                     Match = false, 

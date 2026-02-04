@@ -14,23 +14,25 @@ namespace CCP.AddressMatcher.Services
         private readonly bool _mockMode;
         private string? _accessToken;
         private DateTime _tokenExpiry;
+        private readonly ILogger<USPSValidationService> _logger;
 
-        public USPSValidationService(HttpClient httpClient, IConfiguration configuration)
+        public USPSValidationService(HttpClient httpClient, IConfiguration configuration, ILogger<USPSValidationService> logger)
         {
             _httpClient = httpClient;
             _configuration = configuration;
             _apiKey = _configuration["USPSApiKey"] ?? _configuration["USPSUserId"];
-            _clientSecret = _configuration["USPSClientSecret"]; // You might need this too
+            _clientSecret = _configuration["USPSClientSecret"];
             _isConfigured = !string.IsNullOrEmpty(_apiKey) && _apiKey != "your-usps-user-id" && _apiKey.Length > 10;
             _mockMode = !_isConfigured;
+            _logger = logger;
             
             if (_mockMode)
             {
-                Console.WriteLine("USPS running in MOCK MODE - using simulated validation");
+                _logger.LogInformation("USPS running in MOCK MODE - using simulated validation");
             }
             else
             {
-                Console.WriteLine($"USPS OAuth2 configured with API Key: {_apiKey?.Substring(0, 10)}...");
+                _logger.LogInformation("USPS OAuth2 configured with API Key: {ApiKeyPrefix}...", _apiKey?.Substring(0, 10));
             }
         }
 
@@ -48,12 +50,12 @@ namespace CCP.AddressMatcher.Services
         {
             try
             {
-                Console.WriteLine($"OAuth2 USPS validation for: {address}");
+                _logger.LogInformation("OAuth2 USPS validation for: {Address}", address);
                 
                 // Skip international addresses
                 if (IsInternationalAddress(address))
                 {
-                    Console.WriteLine("USPS: Skipping international address");
+                    _logger.LogInformation("USPS: Skipping international address");
                     return null;
                 }
 
@@ -61,7 +63,7 @@ namespace CCP.AddressMatcher.Services
                 var accessToken = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(accessToken))
                 {
-                    Console.WriteLine("USPS: Failed to get access token");
+                    _logger.LogWarning("USPS: Failed to get access token");
                     return null;
                 }
 
@@ -85,12 +87,12 @@ namespace CCP.AddressMatcher.Services
                 var response = await _httpClient.PostAsync("https://api.usps.com/addresses/v3/address", content);
                 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"USPS OAuth2 Response Status: {response.StatusCode}");
-                Console.WriteLine($"USPS OAuth2 Response: {responseContent}");
+                _logger.LogDebug("USPS OAuth2 Response Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("USPS OAuth2 Response: {ResponseContent}", responseContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"USPS OAuth2 error: {response.StatusCode} - {responseContent}");
+                    _logger.LogWarning("USPS OAuth2 error: {StatusCode} - {ResponseContent}", response.StatusCode, responseContent);
                     return null;
                 }
 
@@ -98,7 +100,7 @@ namespace CCP.AddressMatcher.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"OAuth2 USPS validation failed: {ex.Message}");
+                _logger.LogWarning(ex, "OAuth2 USPS validation failed");
                 return null;
             }
         }
@@ -113,7 +115,7 @@ namespace CCP.AddressMatcher.Services
                     return _accessToken;
                 }
 
-                Console.WriteLine("USPS: Getting new OAuth2 access token...");
+                _logger.LogDebug("USPS: Getting new OAuth2 access token...");
 
                 // Prepare OAuth2 request
                 var tokenRequest = new List<KeyValuePair<string, string>>
@@ -135,12 +137,12 @@ namespace CCP.AddressMatcher.Services
                 var response = await _httpClient.PostAsync("https://api.usps.com/oauth2/v3/token", formContent);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
-                Console.WriteLine($"OAuth2 Token Response Status: {response.StatusCode}");
-                Console.WriteLine($"OAuth2 Token Response: {responseContent}");
+                _logger.LogDebug("OAuth2 Token Response Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("OAuth2 Token Response: {ResponseContent}", responseContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"OAuth2 token request failed: {response.StatusCode} - {responseContent}");
+                    _logger.LogWarning("OAuth2 token request failed: {StatusCode} - {ResponseContent}", response.StatusCode, responseContent);
                     return null;
                 }
 
@@ -153,16 +155,16 @@ namespace CCP.AddressMatcher.Services
                 {
                     _accessToken = tokenResponse.AccessToken;
                     _tokenExpiry = DateTime.Now.AddSeconds(tokenResponse.ExpiresIn - 60); // Refresh 1 minute early
-                    Console.WriteLine($"USPS: Got access token, expires in {tokenResponse.ExpiresIn} seconds");
+                    _logger.LogInformation("USPS: Got access token, expires in {ExpiresIn} seconds", tokenResponse.ExpiresIn);
                     return _accessToken;
                 }
 
-                Console.WriteLine("USPS: Failed to parse token response");
+                _logger.LogWarning("USPS: Failed to parse token response");
                 return null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"OAuth2 token request failed: {ex.Message}");
+                _logger.LogError(ex, "OAuth2 token request failed");
                 return null;
             }
         }
@@ -179,39 +181,39 @@ namespace CCP.AddressMatcher.Services
                 if (response?.Address != null)
                 {
                     var standardized = $"{response.Address.StreetAddress}, {response.Address.City}, {response.Address.State} {response.Address.ZipCode}".ToUpper();
-                    Console.WriteLine($"USPS standardized: {standardized}");
+                    _logger.LogInformation("USPS standardized: {Standardized}", standardized);
                     return standardized;
                 }
 
-                Console.WriteLine("USPS: No valid address in response");
+                _logger.LogWarning("USPS: No valid address in response");
                 return null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to parse USPS response: {ex.Message}");
+                _logger.LogWarning(ex, "Failed to parse USPS response");
                 return null;
             }
         }
 
         private async Task<string?> MockUSPSValidation(string address)
         {
-            Console.WriteLine($"MOCK USPS validation for: {address}");
+            _logger.LogInformation("MOCK USPS validation for: {Address}", address);
             await Task.Delay(100);
             
             if (IsInternationalAddress(address))
             {
-                Console.WriteLine("MOCK USPS: Skipping international address");
+                _logger.LogInformation("MOCK USPS: Skipping international address");
                 return null;
             }
             
             var normalized = NormalizeAddressForUSPS(address);
             if (!string.IsNullOrEmpty(normalized))
             {
-                Console.WriteLine($"MOCK USPS result: {normalized}");
+                _logger.LogInformation("MOCK USPS result: {Normalized}", normalized);
                 return normalized;
             }
             
-            Console.WriteLine("MOCK USPS: Address could not be validated");
+            _logger.LogInformation("MOCK USPS: Address could not be validated");
             return null;
         }
 

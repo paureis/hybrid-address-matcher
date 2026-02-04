@@ -4,22 +4,25 @@ using CCP.AddressMatcher.Utils;
 namespace CCP.AddressMatcher.Services
 {
     public class EnhancedAddressMatchingService
-    {
+        {   
         private readonly GoogleGeocodingService _geocodingService;
         private readonly USPSValidationService _uspsService;
         private readonly LLMFallbackService _llmService;
-        private readonly AddressMatchingService _addressMatchingService; // Add this
+        private readonly AddressMatchingService _addressMatchingService;
+        private readonly ILogger<EnhancedAddressMatchingService> _logger;
 
         public EnhancedAddressMatchingService(
             GoogleGeocodingService geocodingService,
             USPSValidationService uspsService,
             LLMFallbackService llmService,
-            AddressMatchingService addressMatchingService) // Add this parameter
+            AddressMatchingService addressMatchingService,
+            ILogger<EnhancedAddressMatchingService> logger)
         {
             _geocodingService = geocodingService;
             _uspsService = uspsService;
             _llmService = llmService;
-            _addressMatchingService = addressMatchingService; // Add this
+            _addressMatchingService = addressMatchingService;
+            _logger = logger;
         }
 
         public async Task<EnhancedMatchResult> CompareAddressesAsync(string address1, string address2)
@@ -63,7 +66,7 @@ namespace CCP.AddressMatcher.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"USPS layer failed: {ex.Message}");
+                _logger.LogWarning("USPS layer failed: {Message}", ex.Message);
                 layers.Add(new LayerResult { Layer = "USPS", Success = false });
             }
 
@@ -72,11 +75,11 @@ namespace CCP.AddressMatcher.Services
             {
                 // Fixed: Use the correct service and parameters
                 var geoResult = await _addressMatchingService.CompareAddressesAsync(address1, address2);
-                Console.WriteLine($"Enhanced: Geocoding result - Match: {geoResult.Match}, Confidence: {geoResult.Confidence}");
+                _logger.LogInformation("Enhanced: Geocoding result - Match: {Match}, Confidence: {Confidence}", geoResult.Match, geoResult.Confidence);
                 
                 if (geoResult.Confidence >= 0.3)
                 {
-                    Console.WriteLine($"Enhanced: Using geocoding result");
+                   _logger.LogInformation("Enhanced: Using geocoding result");
                     return new EnhancedMatchResult
                     {
                         Match = geoResult.Match,
@@ -89,13 +92,13 @@ namespace CCP.AddressMatcher.Services
                 }
                 else
                 {
-                    Console.WriteLine($"Enhanced: Geocoding confidence too low, continuing to next layer");
+                    _logger.LogDebug("Enhanced: Geocoding confidence too low, continuing to next layer");
                 }
                 layers.Add(new LayerResult { Layer = "Geocoding", Success = true, Result = geoResult });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Enhanced: Geocoding failed: {ex.Message}");
+                _logger.LogWarning("Enhanced: Geocoding failed: {Message}", ex.Message);
                 layers.Add(new LayerResult { Layer = "Geocoding", Success = false });
             }
 

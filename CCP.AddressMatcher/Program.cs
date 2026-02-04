@@ -4,9 +4,6 @@ using CCP.AddressMatcher.Models;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
-Console.WriteLine("Google API Key: " + builder.Configuration["GoogleApiKey"]);
-Console.WriteLine("USPS User ID: " + builder.Configuration["USPSUserId"]);
-Console.WriteLine("OpenAI API Key: " + (string.IsNullOrEmpty(builder.Configuration["OpenAIApiKey"]) ? "Not configured" : "Configured"));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
