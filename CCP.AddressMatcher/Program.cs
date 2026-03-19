@@ -2,6 +2,8 @@ using CCP.AddressMatcher.Services;
 using CCP.AddressMatcher.Utils;
 using CCP.AddressMatcher.Models;
 using System.Text.Json;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +33,48 @@ else
     builder.Services.AddDistributedMemoryCache();
 }
 
+// Rate limiting — protect expensive external API calls from abuse
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+
+    // General limit: 30 requests/minute per IP for standard endpoints
+    options.AddPolicy("general", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // Strict limit: 10 requests/minute per IP for expensive API endpoints (Google, LLM)
+    options.AddPolicy("expensive", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // Batch limit: 3 requests/minute per IP — each batch multiplies costs
+    options.AddPolicy("batch", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
@@ -47,6 +91,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
@@ -67,7 +112,7 @@ app.MapPost("/api/compare-addresses", (CompareRequest request) =>
         normalizedAddress1 = normalized1,
         normalizedAddress2 = normalized2
     });
-});
+}).RequireRateLimiting("general");
 
 // 🌐 Google-only validation (keep existing)
 app.MapPost("/api/google-validate", async (GoogleAddressValidatorService validator, GoogleRequest request) =>
@@ -86,7 +131,7 @@ app.MapPost("/api/google-validate", async (GoogleAddressValidatorService validat
     {
         return Results.BadRequest(new { error = "Validation failed: Address is incomplete, malformed, or could not be verified by Google." });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 🪐 Hybrid comparison (keep existing)
 app.MapPost("/api/hybrid-compare", (CompareRequest request) =>
@@ -110,7 +155,7 @@ app.MapPost("/api/hybrid-compare", (CompareRequest request) =>
         match = isMatch,
         differences = differences
     });
-});
+}).RequireRateLimiting("general");
 
 // 🎯 Geocoding-based comparison endpoint (keep existing)
 app.MapPost("/api/geocoding-compare", async (AddressMatchingService matchingService, CompareRequest request) =>
@@ -155,7 +200,7 @@ app.MapPost("/api/geocoding-compare", async (AddressMatchingService matchingServ
     {
         return Results.BadRequest(new { error = ex.Message });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 🔄 Smart comparison endpoint (keep existing)
 app.MapPost("/api/smart-compare", async (AddressMatchingService matchingService, CompareRequest request) =>
@@ -228,7 +273,7 @@ app.MapPost("/api/smart-compare", async (AddressMatchingService matchingService,
             }
         });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 🏆 NEW: Enhanced multi-layer comparison endpoint (ALL 5 LAYERS)
 app.MapPost("/api/enhanced-compare", async (EnhancedAddressMatchingService enhancedService, CompareRequest request) =>
@@ -256,7 +301,7 @@ app.MapPost("/api/enhanced-compare", async (EnhancedAddressMatchingService enhan
     {
         return Results.BadRequest(new { error = ex.Message });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 🧪 NEW: USPS validation testing endpoint
 app.MapPost("/api/usps-validate", async (USPSValidationService uspsService, GoogleRequest request) =>
@@ -283,7 +328,7 @@ app.MapPost("/api/usps-validate", async (USPSValidationService uspsService, Goog
     {
         return Results.BadRequest(new { success = false, error = ex.Message });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 🤖 NEW: LLM fallback testing endpoint
 app.MapPost("/api/llm-evaluate", async (LLMFallbackService llmService, LLMRequest request) =>
@@ -308,7 +353,7 @@ app.MapPost("/api/llm-evaluate", async (LLMFallbackService llmService, LLMReques
     {
         return Results.BadRequest(new { error = ex.Message });
     }
-});
+}).RequireRateLimiting("expensive");
 
 // 📊 Batch comparison endpoint (keep existing)
 app.MapPost("/api/batch-compare", async (AddressMatchingService matchingService, BatchCompareRequest request) =>
@@ -358,13 +403,13 @@ app.MapPost("/api/batch-compare", async (AddressMatchingService matchingService,
         }),
         accuracy = CalculateAccuracy(results)
     };
-    
+
     return Results.Ok(new
     {
         results = results,
         summary = summary
     });
-});
+}).RequireRateLimiting("batch");
 
 // 🎯 NEW: Enhanced batch comparison with all layers
 app.MapPost("/api/enhanced-batch-compare", async (EnhancedAddressMatchingService enhancedService, BatchCompareRequest request) =>
@@ -418,13 +463,13 @@ app.MapPost("/api/enhanced-batch-compare", async (EnhancedAddressMatchingService
         methodBreakdown = results.GroupBy(r => r.GetType().GetProperty("method")?.GetValue(r)?.ToString() ?? "unknown")
                                  .ToDictionary(g => g.Key, g => g.Count())
     };
-    
+
     return Results.Ok(new
     {
         results = results,
         summary = summary
     });
-});
+}).RequireRateLimiting("batch");
 
 // Helper function for calculating accuracy
 static double CalculateAccuracy(List<object> results)
